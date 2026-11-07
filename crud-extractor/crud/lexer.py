@@ -163,6 +163,10 @@ class Lexer:
                 raise LexError("string tidak ditutup", line, col)
             ch = self._advance()
             if ch == "'":
+                if self._peek() == "'":      # '' berturut-turut = satu kutip
+                    self._advance()
+                    chars.append("'")
+                    continue
                 break
             chars.append(ch)
         self._add(TokenType.STRING, "".join(chars), line, col)
