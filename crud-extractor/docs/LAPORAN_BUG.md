@@ -1,16 +1,5 @@
 # Laporan Bug
 
-Salin blok di bawah untuk setiap bug. Bagian **Akar masalah** wajib ditulis dengan kata-kata
-sendiri dan memakai konsep dari *Crafting Interpreters* (sebutkan bab). Bagian ini diuji lisan.
-
-> **Status draft (Anggota 1: lexer dan parser).** Gejala, reproduksi, perbaikan, dan test sudah
-> diisi dari hasil menjalankan kode asli. Bagian **Akar masalah** masih kosong dan berisi
-> *petunjuk konsep* saja. Tulis penjelasannya sendiri, lalu hapus petunjuknya. Ganti `[nama]`
-> dan konfirmasi tiap baris bertanda `[KONFIRMASI]`. Bug resolver dan analyzer (Anggota 2)
-> ditambahkan di bawah Bug 6.
-
----
-
 ## Bug 1: Keyword hanya dikenali jika ditulis huruf besar
 
 **Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
@@ -205,33 +194,7 @@ rusak dan menghasilkan error ganda.
   ditutup menjadi `LexError` di posisi `/*`. Test: `test_regresi_komentar_blok_T3`,
   `test_regresi_komentar_blok_tidak_ditutup_lexerror`, `test_tepi_bentuk_komentar_blok_khusus`.
 
-## Bug 7: Kolom tanpa qualifier tidak pernah di-resolve (TODO T2)
-
-**Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
-
-**Gejala.** `SELECT nama FROM pelanggan WHERE aktif = 1` membuat `ColumnRef.resolved` bernilai
-`None` untuk `nama` dan `aktif`. Seharusnya `pelanggan` (SPESIFIKASI 4.3). Akibatnya
-`column_usage` kehilangan seluruh kolom tanpa qualifier.
-
-**Reproduksi minimal.**
-
-```sql
-SELECT nama FROM pelanggan;
-```
-
-**Akar masalah.** Bug ada di tahap resolver, fungsi _lookup. Kode lama mengumpulkan semua scope ke dalam daftar chain mulai dari yang terdalam, lalu menelusurinya dengan reversed(chain), sehingga scope terluar diperiksa lebih dulu dan menang. Ini membalik aturan rantai scope (Bab 11, Resolving and Binding): nama harus dicari dari scope terdalam ke luar dan pencarian berhenti di yang pertama ketemu, dan itulah yang membuat deklarasi di scope dalam menutupi (shadow) deklarasi di luar. Akibatnya alias x di subquery salah menunjuk ke pelanggan x di scope luar.
-
-**Perbaikan.** `crud/resolver.py`, `_column`: bila tepat satu entri di scope terdalam,
-`resolved` diisi; bila lebih dari satu, warning "ambigu tanpa skema"; bila nol, warning.
-Alternatif yang ditolak: menebak tabel pertama saat ambigu, karena tanpa skema itu data palsu.
-
-**Test regresi.** `test_regresi_kolom_tanpa_qualifier_satu_tabel_t2`.
-
-**Peran AI.** Claude membantu menemukan bug ini dengan membandingkan _lookup dengan SPESIFIKASI 4.3, lalu mengusulkan agar pencarian berjalan dari self.scope ke parent. Verifikasi: (1) python3 -m crud.cli data/sample/audit.sql --ast menunjukkan x.pelanggan_id di baris 12 menunjuk ke pesanan; (2) test_regresi_shadowing_alias_dalam_menutupi_luar gagal di kode asli dosen dan lulus setelah perbaikan
-
----
-
-## Bug 8: Pencarian alias berjalan dari scope terluar
+## Bug 7: Pencarian alias berjalan dari scope terluar
 
 **Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
 
@@ -246,7 +209,7 @@ baris 12.
 SELECT x.id FROM pelanggan x WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x);
 ```
 
-**Akar masalah.** Bug ada di tahap resolver, fungsi _delete. Fungsi itu memanggil _push() untuk membuat scope DELETE dan mendeklarasikan tabel targetnya, tetapi tidak pernah memanggil _pop(), berbeda dengan _select dan _update. Ini melanggar pasangan beginScope/endScope (Bab 11, scopes): setiap scope yang dibuka harus ditutup di akhir blok yang membuatnya. Akibatnya self.scope tetap menunjuk scope DELETE setelah statement selesai, scope statement berikutnya menjadi anaknya, dan alias s masih ditemukan lewat rantai parent, sehingga satu statement bisa melihat alias statement sebelumnya.
+**Akar masalah.** Bug ada di tahap resolver, fungsi `_lookup`. Kode lama mengumpulkan semua scope ke dalam daftar `chain` mulai dari yang terdalam, lalu menelusurinya dengan `reversed(chain)`, sehingga scope terluar diperiksa lebih dulu dan menang. Ini membalik aturan rantai scope (Bab 11, *Resolving and Binding*): nama harus dicari dari scope terdalam ke luar dan pencarian berhenti di yang pertama ketemu, dan itulah yang membuat deklarasi di scope dalam menutupi (*shadow*) deklarasi di luar. Akibatnya alias `x` di subquery salah menunjuk ke `pelanggan x` di scope luar.
 
 **Perbaikan.** `crud/resolver.py`, `_lookup`: berjalan dari `self.scope` ke `parent`,
 berhenti di yang pertama ketemu. Alternatif yang ditolak: satu kamus alias global per
@@ -254,27 +217,27 @@ statement, karena tidak bisa membedakan shadowing dari correlated subquery.
 
 **Test regresi.** `test_regresi_shadowing_alias_dalam_menutupi_luar`.
 
-**Peran AI.** Claude membantu menemukan bug ini dengan membandingkan _delete dengan _update dan mengusulkan penambahan self._pop(). Verifikasi: (1) SPESIFIKASI 4.5 meminta tidak ada scope tersisa sesudah satu statement; (2) test_regresi_scope_delete_tidak_bocor_ke_statement_berikutnya gagal sebelum perbaikan dan lulus sesudahnya; (3) audit.sql baris 18 sekarang melapor error alias s
+**Peran AI.** Claude membantu menemukan bug ini dengan membandingkan `_lookup` dengan SPESIFIKASI 4.3, lalu mengusulkan agar pencarian berjalan dari `self.scope` ke `parent`. Verifikasi: (1) `python3 -m crud.cli data/sample/audit.sql --ast` menunjukkan `x.pelanggan_id` di baris 12 menunjuk ke `pesanan`; (2) `test_regresi_shadowing_alias_dalam_menutupi_luar` gagal di kode asli dosen dan lulus setelah perbaikan.
 
 ---
 
-## Bug 9: Scope `DELETE` tidak pernah ditutup
+## Bug 8: Scope `DELETE` tidak pernah ditutup
 
 **Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
 
 **Gejala.** Alias dari `DELETE ... s` tetap terlihat oleh statement berikutnya (melanggar
-SPESIFIKASI 4.5). `DELETE FROM sesi s ...; DELETE FROM sesi s ...` menghasilkan error
-"dideklarasikan dua kali", dan `SELECT s.id FROM pengguna u` sesudah `DELETE ... s` tidak
-melapor alias `s` tidak terdefinisi.
+SPESIFIKASI 4.5). `SELECT s.id FROM pengguna u` yang datang sesudah `DELETE FROM sesi s ...`
+tidak melapor `alias 's' tidak terdefinisi`, padahal bila dijalankan sendirian ia melapor
+error itu. Di `audit.sql`, baris 18 seharusnya melapor error tersebut.
 
 **Reproduksi minimal.**
 
 ```sql
 DELETE FROM sesi s WHERE s.id = 1;
-DELETE FROM sesi s WHERE s.id = 2;
+SELECT s.id FROM pengguna u;
 ```
 
-**Akar masalah.** Bug ada di tahap analyzer, fungsi analyze_statement, cabang Update. Penelusuran AST membawa parameter op yang menentukan operasi untuk tabel yang ditemui. Kode lama meneruskan "U" ke subquery di SET dan WHERE, sehingga operasi tulis milik tabel target ikut menempel pada tabel yang hanya dibaca. Aturan lokal proyek (SPESIFIKASI 5) menyatakan tabel yang dibaca lewat subquery selalu R, apa pun jenis statement luarnya, dan U hanya milik tabel target. Perbaikannya memisahkan keduanya: target diberi U, sedangkan subquery dikumpulkan dengan "R".
+**Akar masalah.** Bug ada di tahap resolver, fungsi `_delete`. Fungsi itu memanggil `_push()` untuk membuat scope DELETE dan mendeklarasikan tabel targetnya, tetapi tidak pernah memanggil `_pop()`, berbeda dengan `_select` dan `_update`. Ini melanggar pasangan `beginScope`/`endScope` (Bab 11, scopes): setiap scope yang dibuka harus ditutup di akhir blok yang membuatnya. Akibatnya `self.scope` tetap menunjuk scope DELETE setelah statement selesai, scope statement berikutnya menjadi anaknya, dan alias `s` masih ditemukan lewat rantai `parent`, sehingga satu statement bisa melihat alias statement sebelumnya.
 
 **Perbaikan.** `crud/resolver.py`, `_delete`: menambahkan `self._pop()`. Alternatif yang
 ditolak: mereset `self.scope = None` di awal tiap statement, karena menyembunyikan push/pop
@@ -282,6 +245,33 @@ yang tidak seimbang.
 
 **Test regresi.** `test_regresi_scope_delete_tidak_bocor_ke_statement_berikutnya`.
 
-**Peran AI.** Claude membantu menemukan bug ini dengan membaca cabang Update terhadap tabel aturan di SPESIFIKASI 5. Verifikasi: (1) hasil --detail untuk audit.sql baris 20 sekarang pelanggan,R dan pesanan,U, cocok dengan hitungan manual saya; (2) dua test regresi (..._di_where_dibaca_R dan ..._di_set_dibaca_R) gagal sebelum dan lulus sesudah perbaikan
+**Peran AI.** Claude membantu menemukan bug ini dengan membandingkan `_delete` dengan `_update` dan mengusulkan penambahan `self._pop()`. Verifikasi: (1) SPESIFIKASI 4.5 meminta tidak ada scope tersisa sesudah satu statement; (2) `test_regresi_scope_delete_tidak_bocor_ke_statement_berikutnya` gagal sebelum perbaikan dan lulus sesudahnya; (3) `audit.sql` baris 18 sekarang melapor error alias `s`.
+
+---
+
+## Bug 9: Subquery di `UPDATE` dihitung sebagai `U`
+
+**Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
+
+**Gejala.** `UPDATE pelanggan SET level = 'gold' WHERE id IN (SELECT pelanggan_id FROM
+pesanan)` menghasilkan `pesanan: U`, seharusnya `pesanan: R` (SPESIFIKASI 5: membaca lewat
+subquery selalu R). Akibatnya `laporan_penjualan.sql` memuat `pesanan: RUD` dan bukan `RD`.
+
+**Reproduksi minimal.**
+
+```sql
+UPDATE a SET x = (SELECT MAX(y) FROM b);
+```
+
+**Akar masalah.** Bug ada di tahap analyzer, fungsi `analyze_statement`, cabang `Update`. Penelusuran AST membawa parameter `op` yang menentukan operasi untuk tabel yang ditemui. Kode lama meneruskan `"U"` ke subquery di `SET` dan `WHERE`, sehingga operasi tulis milik tabel target ikut menempel pada tabel yang hanya dibaca. Aturan lokal proyek (SPESIFIKASI 5) menyatakan tabel yang dibaca lewat subquery selalu `R`, apa pun jenis statement luarnya, dan `U` hanya milik tabel target. Perbaikannya memisahkan keduanya: target diberi `U`, sedangkan subquery dikumpulkan dengan `"R"`.
+
+**Perbaikan.** `crud/analyzer.py`, `analyze_statement`: subquery di `SET` dan `WHERE`
+dikumpulkan dengan operasi `"R"`. Alternatif yang ditolak: menurunkan operasi dari jenis
+statement terluar.
+
+**Test regresi.** `test_regresi_update_subquery_di_where_dibaca_R`,
+`test_regresi_update_subquery_di_set_dibaca_R`.
+
+**Peran AI.** Claude membantu menemukan bug ini dengan membaca cabang `Update` terhadap tabel aturan di SPESIFIKASI 5. Verifikasi: (1) hasil `--detail` untuk `audit.sql` baris 20 sekarang `pelanggan,R` dan `pesanan,U`, cocok dengan hitungan manual; (2) dua test regresi (`..._di_where_dibaca_R` dan `..._di_set_dibaca_R`) gagal sebelum dan lulus sesudah perbaikan.
 
 ---
