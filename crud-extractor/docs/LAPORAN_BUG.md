@@ -5,7 +5,7 @@
 
 ## Bug 1: Keyword hanya dikenali jika ditulis huruf besar
 
-**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** nama
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** Alpedro
 
 **Gejala.** `select id from t;` menghasilkan token `IDENT` untuk semua kata, lalu parser
 melapor `Baris 1, kolom 1: diharapkan awal statement (...), ditemukan 'select'`. Akibatnya
