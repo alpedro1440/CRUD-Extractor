@@ -1,19 +1,11 @@
 # Kartu Desain
 
-Tuliskan lima keputusan desain penting dalam pekerjaan kalian. Untuk tiap keputusan, sebutkan
-alternatif yang ditolak dan alasannya. Contoh topik (boleh memilih yang lain):
-
-- bagaimana parser membedakan `*` sebagai "semua kolom" dan sebagai perkalian;
-- di mana dan bagaimana presedensi `AND`/`OR` dinyatakan;
-- mengapa error recovery berhenti di `;`, bukan di keyword `SELECT` berikutnya;
-- urutan pencarian scope dan akibatnya pada shadowing serta correlated subquery;
-- mengapa kolom tanpa qualifier hanya dilihat di scope terdalam, dan apa kelemahannya;
-- bagaimana implementasi `INSERT ... SELECT` atau komentar blok kalian.
+Lima keputusan desain pada bagian Resolver dan Analyzer
 
 | No | Keputusan | Alternatif yang ditolak | Alasan |
 | --- | --- | --- | --- |
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
+| 1 | **Qualifier dicari lewat rantai scope dari terdalam ke luar** (`_lookup` berjalan dari `self.scope` ke `parent`, berhenti di yang pertama ketemu). Scope baru dibuat per `SELECT`/`UPDATE`/`DELETE`, termasuk subquery. | (a) Satu kamus alias global per statement. (b) Mencari dari scope terluar ke dalam (ini bug awal di kode). | Dengan kamus global, `x` di subquery menimpa atau bertabrakan dengan `x` di luar, jadi shadowing dan correlated subquery tidak bisa dua-duanya benar. Mencari dari luar ke dalam membuat `x.pelanggan_id` di `audit.sql` baris 12 salah di-resolve ke `pelanggan`. Rantai scope yang dicari dari dalam adalah lexical scoping biasa (Crafting Interpreters, bab 11). |
+| 2 | **Kolom tanpa qualifier hanya melihat scope terdalam.** Satu tabel: di-resolve. Lebih dari satu: warning "ambigu tanpa skema", `resolved = None`. Nol tabel: warning. | (a) Melanjutkan pencarian ke scope luar bila tidak cocok. (b) Menebak tabel pertama saat ambigu. (c) Memberi error, bukan warning. | Tanpa skema database kita tidak tahu kolom itu milik tabel mana. Melihat ke luar akan salah menautkan kolom subquery ke tabel luar. Menebak membuat `column_usage` memuat data palsu yang tampak benar. Warning dipilih karena query-nya mungkin valid, hanya informasi kita yang kurang. Kelemahannya: `SELECT nama FROM a JOIN b` kehilangan atribusi kolom. |
+| 3 | **Subquery di `FROM` di-resolve sebelum scope `SELECT` pembungkusnya dibuat** (`_select` memanggil `_select(src.query)` sebelum `_push()`). | Mendeklarasikan semua sumber dulu, baru me-resolve subquery (perilaku seperti `LATERAL`). | SQL standar tidak mengizinkan derived table melihat saudaranya di `FROM` yang sama tanpa `LATERAL`, dan SPESIFIKASI 4.4 menyatakannya. Dengan urutan ini `SELECT d.x FROM a, (SELECT a.id ...) d` menghasilkan error alias `a` tidak terdefinisi, yang benar. |
+| 4 | **Setiap statement menyimetriskan `_push()` dan `_pop()`**, sehingga scope kembali kosong setelah statement selesai (SPESIFIKASI 4.5). `_delete` sekarang memanggil `_pop()`. | Mereset `self.scope = None` di awal setiap `resolve_statement` sebagai pengaman. | Pengaman reset menyembunyikan bug push/pop yang tidak seimbang, dan scope subquery yang bocor di tengah statement tetap salah. Pasangan push/pop menjaga invarian "scope kembali ke keadaan semula" di setiap jalur, jadi alias `s` dari `DELETE ... s` tidak terlihat oleh `SELECT s.id` berikutnya. |
+| 5 | **Analyzer memakai parameter `op` per penelusuran.** Tabel target dapat C/U/D dari jenis statement. Semua tabel yang dibaca lewat subquery (di `SET`, `WHERE`, `VALUES`, sumber `INSERT ... SELECT`) memakai `op = "R"`. | Menurunkan operasi dari jenis statement terluar, sehingga subquery dalam `UPDATE` otomatis ber-U. | Aturan CRUD proyek (SPESIFIKASI 5): membaca lewat subquery selalu R. Menurunkan dari statement terluar menghasilkan `pesanan: U` pada `UPDATE pelanggan ... IN (SELECT ... FROM pesanan)`, padahal `pesanan` hanya dibaca (ini bug awal). Hasil per tabel berupa *himpunan* operasi, jadi satu tabel yang ditulis dan dibaca di statement yang sama tampil sebagai `RU` (urutan C, R, U, D). |

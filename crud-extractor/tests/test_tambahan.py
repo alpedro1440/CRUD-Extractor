@@ -11,7 +11,10 @@ import pytest
 
 from crud import ast_nodes as ast
 from crud.lexer import LexError, TokenType as T, tokenize
+from crud.analyzer import analyze_statement
 from crud.parser import parse_sql
+from crud.resolver import Resolver
+
 
 
 # ---- helper -----------------------------------------------------------------
@@ -37,6 +40,21 @@ def shape(node):
         return node.value
     raise AssertionError(f"node tidak dikenal: {node!r}")
 
+
+def crud(sql):
+    script = parse_sql(sql)
+    assert script.errors == [], script.errors
+    return analyze_statement(script.statements[0])
+
+
+def resolve(sql):
+    script = parse_sql(sql)
+    assert script.errors == [], script.errors
+    return script, Resolver().resolve_script(script)
+
+
+def columns(node):
+    return [n for n in ast.iter_nodes(node) if isinstance(n, ast.ColumnRef)]
 
 def where_of(sql):
     script = parse_sql(sql)
@@ -126,6 +144,44 @@ def test_regresi_insert_select_T1():
 
     s = parse_sql("INSERT INTO arsip SELECT id FROM pesanan").statements[0]
     assert s.columns == [] and s.query.sources[0].name == "pesanan"
+
+# ---- analyzer -----------------------------------------------------------------
+def test_regresi_update_subquery_di_where_dibaca_R():
+    # Bug: subquery di UPDATE ditandai "U", padahal membaca lewat subquery selalu R (SPESIFIKASI 5).
+    assert crud("UPDATE pelanggan SET level = 'gold' "
+                "WHERE id IN (SELECT pelanggan_id FROM pesanan)") == {
+        "pelanggan": {"U"}, "pesanan": {"R"}}
+
+
+def test_regresi_update_subquery_di_set_dibaca_R():
+    assert crud("UPDATE a SET x = (SELECT MAX(y) FROM b)") == {"a": {"U"}, "b": {"R"}}
+
+
+# ---- resolver -----------------------------------------------------------------
+def test_regresi_shadowing_alias_dalam_menutupi_luar():
+    # Bug: _lookup() dulu mencari dari scope terluar, sehingga x di subquery
+    # ter-resolve ke pelanggan (luar), bukan pesanan (dalam). SPESIFIKASI 4.3.
+    script, _ = resolve(
+        "SELECT x.id FROM pelanggan x WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x)")
+    dalam = [c for c in columns(script) if c.name == "pelanggan_id"][0]
+    luar = [c for c in columns(script) if c.name == "id"][0]
+    assert dalam.resolved == "pesanan"
+    assert luar.resolved == "pelanggan"
+
+
+def test_regresi_scope_delete_tidak_bocor_ke_statement_berikutnya():
+    # Bug: _delete() tidak memanggil _pop(), jadi alias s bocor. SPESIFIKASI 4.5.
+    _, diags = resolve("DELETE FROM sesi s WHERE s.id = 1; DELETE FROM sesi s WHERE s.id = 2")
+    assert diags == []                       # dulu: error "dideklarasikan dua kali"
+    _, diags = resolve("DELETE FROM sesi s WHERE s.id = 1; SELECT s.id FROM pengguna u")
+    assert [d.level for d in diags] == ["error"]   # alias s tidak boleh terlihat lagi
+
+
+def test_regresi_kolom_tanpa_qualifier_satu_tabel_t2():
+    # TODO T2 dulu kosong: resolved selalu None.
+    script, diags = resolve("UPDATE produk SET stok = stok - 1 WHERE id = 3")
+    assert {c.resolved for c in columns(script)} == {"produk"}
+    assert diags == []
 
 
 # =============================================================================
