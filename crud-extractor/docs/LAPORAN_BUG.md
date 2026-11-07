@@ -1,8 +1,19 @@
 # Laporan Bug
 
+Salin blok di bawah untuk setiap bug. Bagian **Akar masalah** wajib ditulis dengan kata-kata
+sendiri dan memakai konsep dari *Crafting Interpreters* (sebutkan bab). Bagian ini diuji lisan.
+
+> **Status draft (Anggota 1: lexer dan parser).** Gejala, reproduksi, perbaikan, dan test sudah
+> diisi dari hasil menjalankan kode asli. Bagian **Akar masalah** masih kosong dan berisi
+> *petunjuk konsep* saja. Tulis penjelasannya sendiri, lalu hapus petunjuknya. Ganti `[nama]`
+> dan konfirmasi tiap baris bertanda `[KONFIRMASI]`. Bug resolver dan analyzer (Anggota 2)
+> ditambahkan di bawah Bug 6.
+
+---
+
 ## Bug 1: Keyword hanya dikenali jika ditulis huruf besar
 
-**Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** nama
 
 **Gejala.** `select id from t;` menghasilkan token `IDENT` untuk semua kata, lalu parser
 melapor `Baris 1, kolom 1: diharapkan awal statement (...), ditemukan 'select'`. Akibatnya
@@ -15,10 +26,8 @@ seluruh `pemeliharaan.sql` (yang ditulis huruf kecil) tidak bisa diproses. Menur
 select id from t;
 ```
 
-**Akar masalah.** *[Tulis sendiri.]*
-Petunjuk konsep: pembedaan keyword dan identifier di lexer (Bab 4, bagian reserved words and
-identifiers). Pikirkan: bagian mana dari kode yang membandingkan teks dengan `KEYWORDS`, dan
-teks apa yang dibandingkan?
+**Akar masalah.**
+Masalah terjadi karena lexer membandingkan kata yang ditemukan dengan daftar keywords secara langsung, tanpa mengubahnya ke huruf yang sama terlebih dahulu. Akibatnya, kata `select` yang ditulis menggunakan huruf kecil tidak dikenali sebagai keyword `SELECT`, melainkan dianggap sebagai token `IDENT`. Hal ini menyebabkan parser menerima token 'IDENT' padahal parser mengharapkan sebuah statement diawali dengan keyword `SELECT`, sehingga muncul error pada baris 1 kolom 1 dan file `pemeliharaan.sql` gagal diproses. Perbaikan dilakukan pada bagian lexer, bukan parser, karena lexer bertugas mengidentifikasi dan memberikan jenis token, seperti `KEYWORD` atau `IDENT`. Caranya adalah dengan mengubah kata yang ditemukan menjadi huruf besar menggunakan fungsi `upper()` sebelum dicocokkan dengan daftar keywords. Dengan begitu, keyword tetap dikenali meskipun ditulis menggunakan huruf kapital maupun huruf kecil. Perbaikan ini sesuai dengan pembahasan Reserved Words pada Bab 4 buku Crafting Interpreters dan ketentuan pada `SPESIFIKASI.md` bagian 2.2.
 
 **Perbaikan.** `crud/lexer.py`, `_word`: teks dibandingkan ke `KEYWORDS` dalam bentuk
 `text.upper()`; token keyword menyimpan bentuk huruf besar, sedangkan `IDENT` menyimpan teks
@@ -29,15 +38,13 @@ identifier.
 **Test regresi.** `test_regresi_keyword_tidak_peka_huruf_besar_kecil`. Penjaga tambahan:
 `test_tepi_identifier_berawalan_keyword` (`selection` tetap `IDENT`).
 
-**Peran AI.** Claude membantu menemukan bug ini saat membandingkan `_word` dengan SPESIFIKASI
-2.2. [KONFIRMASI: tulis bagaimana kalian memverifikasi sendiri, misalnya menjalankan test
-sebelum dan sesudah perbaikan.]
+**Peran AI dan verifikasi.** Draf sebelumnya mencatat bantuan Claude untuk menemukan ketidaksesuaian ini. Perbaikannya diverifikasi dengan test token untuk variasi huruf besar/kecil dan dengan test yang memastikan kata seperti `selection` tetap menjadi `IDENT`. Pastikan nama AI pada catatan awal memang sesuai dengan alat yang benar-benar digunakan kelompok.
 
 ---
 
 ## Bug 2: `<>` terpecah menjadi dua token
 
-**Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** Alpedro
 
 **Gejala.** `a <> 1` menghasilkan `OP '<'`, `OP '>'`, `NUMBER '1'`, dan parser melapor
 `diharapkan ekspresi, ditemukan '>'`. Pada data contoh, `laporan_penjualan.sql` gagal di baris 6
@@ -51,8 +58,7 @@ SPESIFIKASI 2.5: `<>` adalah satu token.
 SELECT id FROM t WHERE a <> 1;
 ```
 
-**Akar masalah.** 
-Masalah terjadi karena lexer membandingkan kata yang ditemukan dengan daftar keywords secara langsung, tanpa mengubahnya ke huruf yang sama terlebih dahulu. Akibatnya, kata `select` yang ditulis menggunakan huruf kecil tidak dikenali sebagai keyword `SELECT`, melainkan dianggap sebagai token `IDENT`. Hal ini menyebabkan parser menerima token 'IDENT' padahal parser mengharapkan sebuah statement diawali dengan keyword `SELECT`, sehingga muncul error pada baris 1 kolom 1 dan file `pemeliharaan.sql` gagal diproses. Perbaikan dilakukan pada bagian lexer, bukan parser, karena lexer bertugas mengidentifikasi dan memberikan jenis token, seperti `KEYWORD` atau `IDENT`. Caranya adalah dengan mengubah kata yang ditemukan menjadi huruf besar menggunakan fungsi `upper()` sebelum dicocokkan dengan daftar keywords. Dengan begitu, keyword tetap dikenali meskipun ditulis menggunakan huruf kapital maupun huruf kecil. Perbaikan ini sesuai dengan pembahasan Reserved Words pada Bab 4 buku Crafting Interpreters dan ketentuan pada `SPESIFIKASI.md` bagian 2.2.
+**Akar masalah.** Pada kode awal, cabang pemindaian karakter `<` hanya memeriksa apakah karakter sesudahnya adalah `=`. Jika bukan, Lexer langsung menghasilkan token `<`. Karakter `>` yang mengikutinya kemudian diproses lagi sebagai token terpisah. Cara tersebut tidak menerapkan prinsip *maximal munch* secara lengkap, yaitu memilih rangkaian operator terpanjang yang cocok. Dalam *Crafting Interpreters* Bab 4, pemindaian token perlu mempertimbangkan karakter berikutnya sebelum memutuskan batas token. Karena `<>` merupakan operator dua karakter yang sah menurut spesifikasi, Lexer harus memeriksa `=` dan `>` sebelum mengeluarkan `<` tunggal.
 
 **Perbaikan.** `crud/lexer.py`, `_scan_token`: setelah `<`, coba `=` (jadi `<=`), lalu `>`
 (jadi `<>`), baru jatuh ke `<`. Alternatif yang ditolak: menggabungkan `<` dan `>` di parser
@@ -60,13 +66,13 @@ bila berdampingan, karena itu menyembunyikan kesalahan lexer dan membuat `a < > 
 
 **Test regresi.** `test_regresi_operator_tidak_sama_dengan_satu_token`.
 
-**Peran AI.** [KONFIRMASI: sama seperti Bug 1.]
+**Peran AI dan verifikasi.** AI membantu membandingkan aturan operator pada spesifikasi dengan cabang pemindaian Lexer. Kelompok memverifikasi jenis dan nilai token melalui test regresi serta menjalankan seluruh pytest.
 
 ---
 
 ## Bug 3: `''` di dalam string mengakhiri string
 
-**Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** Alpedro
 
 **Gejala.** `'O''Brien'` menghasilkan dua token `STRING` (`O` dan `Brien`), dan parser melapor
 `diharapkan ';' di akhir statement, ditemukan 'Brien'`. Seharusnya satu `STRING` bernilai
@@ -78,9 +84,7 @@ bila berdampingan, karena itu menyembunyikan kesalahan lexer dan membuat `a < > 
 SELECT id FROM t WHERE n = 'O''Brien';
 ```
 
-**Akar masalah.** *[Tulis sendiri.]*
-Petunjuk konsep: pemindaian string di lexer (Bab 4) dan kebutuhan melihat satu karakter ke
-depan (*lookahead*) sebelum memutuskan sebuah kutip adalah penutup atau bukan.
+**Akar masalah.** Pemindaian string pada kode awal menganggap setiap kutip tunggal yang ditemukan sebagai tanda akhir string. Lexer tidak melihat karakter berikutnya untuk membedakan kutip penutup dengan dua kutip berurutan yang bermakna satu apostrof di dalam nilai string. Akibatnya, nilai string terpotong terlalu awal. Perbaikan membutuhkan *lookahead*: ketika menemukan kutip tunggal, Lexer memeriksa karakter sesudahnya. Jika karakter berikutnya juga kutip tunggal, keduanya dikonsumsi dan satu karakter kutip ditambahkan ke nilai string; jika tidak, string dinyatakan selesai. Ini termasuk proses pemindaian literal string pada *Crafting Interpreters* Bab 4.
 
 **Perbaikan.** `crud/lexer.py`, `_string`: saat bertemu `'`, bila karakter berikutnya juga `'`
 maka keduanya dikonsumsi dan satu `'` ditambahkan ke nilai; selain itu string berakhir.
@@ -88,13 +92,13 @@ maka keduanya dikonsumsi dan satu `'` ditambahkan ke nilai; selain itu string be
 **Test regresi.** `test_regresi_kutip_ganda_dalam_string_satu_token`; kasus tepi
 `test_tepi_penanda_komentar_di_dalam_string`.
 
-**Peran AI.** [KONFIRMASI.]
+**Peran AI dan verifikasi.** AI membantu menjelaskan penggunaan *lookahead* dan menyarankan test. Test diperiksa terhadap aturan string pada spesifikasi dan dijalankan bersama test Lexer.
 
 ---
 
 ## Bug 4: `AND` dan `OR` memiliki presedensi yang sama
 
-**Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** Alpedro
 
 **Gejala.** `a = 1 OR b = 2 AND c = 3` diparse sebagai `((a = 1 OR b = 2) AND c = 3)`.
 Menurut SPESIFIKASI 3.1 seharusnya `a = 1 OR (b = 2 AND c = 3)`. Tidak terlihat di test
@@ -108,10 +112,7 @@ baris 4-6 memuat pola ini.
 SELECT id FROM t WHERE a = 1 OR b = 2 AND c = 3;
 ```
 
-**Akar masalah.** *[Tulis sendiri.]*
-Petunjuk konsep: presedensi dan asosiatif dalam grammar (Bab 5), dan cara recursive descent
-menyatakan presedensi (Bab 6): satu fungsi per tingkat, tingkat yang lebih rendah memanggil
-tingkat yang lebih tinggi. Hitung berapa tingkat yang dilebur oleh fungsi `_logical` lama.
+**Akar masalah.** Fungsi `_logical()` pada Parser awal menangani `AND` dan `OR` dalam satu perulangan yang sama. Karena kedua operator diproses pada tingkat fungsi yang sama dan digabung secara asosiatif kiri, Parser tidak membedakan tingkat presedensinya. Padahal grammar menentukan `or_expr` sebagai tingkat lebih rendah yang berisi `and_expr`, sedangkan `and_expr` berisi `not_expr`. Dalam *Crafting Interpreters* Bab 5 dan Bab 6, struktur grammar dan fungsi recursive descent perlu mencerminkan tingkat presedensi operator. Jika beberapa tingkat digabung ke satu fungsi, bentuk AST dapat berbeda dari aturan grammar.
 
 **Perbaikan.** `crud/parser.py`: `_logical` dipecah menjadi `_or` (memanggil `_and`) dan `_and`
 (memanggil `_not`); `_expr` memanggil `_or`. Alternatif yang ditolak: tabel presedensi
@@ -121,13 +122,12 @@ aturan per tingkat, sehingga bentuk saat ini lebih mudah dicocokkan satu per sat
 **Test regresi.** `test_regresi_presedensi_and_lebih_tinggi_dari_or`,
 `test_regresi_not_lebih_tinggi_dari_and`; kasus tepi `test_tepi_between_diikuti_and_logika`.
 
-**Peran AI.** [KONFIRMASI.]
-
+**Peran AI dan verifikasi.** AI membantu menelusuri perbedaan grammar dan implementasi recursive descent. Verifikasi dilakukan dengan membandingkan bentuk AST yang dihasilkan untuk kombinasi `AND`, `OR`, dan `NOT`.
 ---
 
 ## Bug 5: `LEFT OUTER JOIN` ditolak
 
-**Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** Alpedro
 
 **Gejala.** `LEFT OUTER JOIN` menghasilkan `Baris 1, kolom 25: diharapkan JOIN, ditemukan
 'OUTER'`. Grammar: `"LEFT" [ "OUTER" ] "JOIN"`. Data contoh `pemeliharaan.sql` memakainya.
@@ -138,22 +138,19 @@ aturan per tingkat, sehingga bentuk saat ini lebih mudah dicocokkan satu per sat
 SELECT a.id FROM a LEFT OUTER JOIN b ON b.a_id = a.id;
 ```
 
-**Akar masalah.** *[Tulis sendiri.]*
-Petunjuk konsep: setiap fungsi parser harus menerima persis bahasa yang didefinisikan satu
-aturan grammar (Bab 6). Bandingkan `_join` dengan aturan `join` di SPESIFIKASI 3, bagian
-yang berada di dalam kurung siku.
+**Akar masalah.** Fungsi `_join()` pada kode awal mengenali keyword `LEFT`, tetapi setelah itu langsung memanggil pemeriksaan wajib untuk `JOIN`. Fungsi tersebut tidak memeriksa kemungkinan hadirnya `OUTER`. Dengan demikian, bahasa yang diterima implementasi Parser lebih sempit daripada bahasa yang ditentukan grammar. Bab 6 *Crafting Interpreters* membahas parser recursive descent yang menerjemahkan aturan grammar ke fungsi; bagian opsional pada grammar harus direpresentasikan sebagai pemeriksaan opsional, bukan token wajib yang dilewati.
 
 **Perbaikan.** `crud/parser.py`, `_join`: setelah `LEFT`, `_match_kw("OUTER")` bersifat opsional.
 
 **Test regresi.** `test_regresi_left_outer_join`.
 
-**Peran AI.** [KONFIRMASI.]
+**Peran AI dan verifikasi.** AI membantu mencocokkan aturan `LEFT [OUTER] JOIN` dengan urutan pemeriksaan token. Kelompok memverifikasi bahwa query `LEFT OUTER JOIN` berhasil diparse dan jenis join tetap `LEFT`.
 
 ---
 
 ## Bug 6: Error recovery membuang seluruh sisa file
 
-**Ditemukan oleh:** [nama] · **Diperbaiki oleh:** [nama]
+**Ditemukan oleh:** Alpedro · **Diperbaiki oleh:** Alpedro
 
 **Gejala.** Satu statement yang rusak membuat semua statement sesudahnya hilang. Pada
 `SELECT id nama, FROM a; SELECT id FROM b; DELETE FROM c;` kode lama menghasilkan 1 error
@@ -167,9 +164,7 @@ SELECT id nama, FROM a;
 SELECT id FROM b;
 ```
 
-**Akar masalah.** *[Tulis sendiri.]*
-Petunjuk konsep: *panic mode* dan *synchronization* (Bab 6, bagian error recovery). Apa
-"titik aman" yang dipakai kode lama, dan apa titik aman yang diminta spesifikasi?
+**Akar masalah.** Fungsi `_synchronize()` pada kode awal terus memanggil `_advance()` selama belum EOF tanpa mencari titik sinkronisasi. Akibatnya, satu kesalahan sintaks dapat menghilangkan semua statement yang tersisa dalam file. Dalam konsep *panic mode recovery* dan *synchronization* pada *Crafting Interpreters* Bab 6, Parser harus mencari token aman untuk melanjutkan proses. Untuk proyek ini, token sinkronisasi yang ditentukan spesifikasi adalah `;`, sehingga recovery harus berhenti setelah mengonsumsi titik koma tersebut.
 
 **Perbaikan.** `crud/parser.py`, `_synchronize`: membuang token sampai dan **termasuk** `;`
 berikutnya. Bila token error adalah `;` itu sendiri (misalnya `SELECT a FROM ;`), token itu
@@ -181,7 +176,7 @@ rusak dan menghasilkan error ganda.
 **Test regresi.** `test_regresi_recovery_berhenti_di_titik_koma`; kasus tepi
 `test_tepi_error_tepat_di_titik_koma`.
 
-**Peran AI.** [KONFIRMASI.]
+**Peran AI dan verifikasi.** AI membantu mengidentifikasi bahwa kode awal tidak memiliki token sinkronisasi. Verifikasi dilakukan dengan file berisi statement rusak diikuti statement valid dan memeriksa jumlah error serta statement yang berhasil disimpan.
 
 ---
 
@@ -194,84 +189,4 @@ rusak dan menghasilkan error ganda.
   ditutup menjadi `LexError` di posisi `/*`. Test: `test_regresi_komentar_blok_T3`,
   `test_regresi_komentar_blok_tidak_ditutup_lexerror`, `test_tepi_bentuk_komentar_blok_khusus`.
 
-## Bug 7: Pencarian alias berjalan dari scope terluar
-
-**Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
-
-**Gejala.** Pada `SELECT x.id FROM pelanggan x WHERE x.id IN (SELECT x.pelanggan_id FROM
-pesanan x)`, `x.pelanggan_id` di subquery ter-resolve ke `pelanggan` (scope luar), bukan
-`pesanan` (SPESIFIKASI 4.3: dicari dari scope terdalam ke luar). Terlihat di `audit.sql`
-baris 12.
-
-**Reproduksi minimal.**
-
-```sql
-SELECT x.id FROM pelanggan x WHERE x.id IN (SELECT x.pelanggan_id FROM pesanan x);
-```
-
-**Akar masalah.** Bug ada di tahap resolver, fungsi `_lookup`. Kode lama mengumpulkan semua scope ke dalam daftar `chain` mulai dari yang terdalam, lalu menelusurinya dengan `reversed(chain)`, sehingga scope terluar diperiksa lebih dulu dan menang. Ini membalik aturan rantai scope (Bab 11, *Resolving and Binding*): nama harus dicari dari scope terdalam ke luar dan pencarian berhenti di yang pertama ketemu, dan itulah yang membuat deklarasi di scope dalam menutupi (*shadow*) deklarasi di luar. Akibatnya alias `x` di subquery salah menunjuk ke `pelanggan x` di scope luar.
-
-**Perbaikan.** `crud/resolver.py`, `_lookup`: berjalan dari `self.scope` ke `parent`,
-berhenti di yang pertama ketemu. Alternatif yang ditolak: satu kamus alias global per
-statement, karena tidak bisa membedakan shadowing dari correlated subquery.
-
-**Test regresi.** `test_regresi_shadowing_alias_dalam_menutupi_luar`.
-
-**Peran AI.** Claude membantu menemukan bug ini dengan membandingkan `_lookup` dengan SPESIFIKASI 4.3, lalu mengusulkan agar pencarian berjalan dari `self.scope` ke `parent`. Verifikasi: (1) `python3 -m crud.cli data/sample/audit.sql --ast` menunjukkan `x.pelanggan_id` di baris 12 menunjuk ke `pesanan`; (2) `test_regresi_shadowing_alias_dalam_menutupi_luar` gagal di kode asli dosen dan lulus setelah perbaikan.
-
----
-
-## Bug 8: Scope `DELETE` tidak pernah ditutup
-
-**Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
-
-**Gejala.** Alias dari `DELETE ... s` tetap terlihat oleh statement berikutnya (melanggar
-SPESIFIKASI 4.5). `SELECT s.id FROM pengguna u` yang datang sesudah `DELETE FROM sesi s ...`
-tidak melapor `alias 's' tidak terdefinisi`, padahal bila dijalankan sendirian ia melapor
-error itu. Di `audit.sql`, baris 18 seharusnya melapor error tersebut.
-
-**Reproduksi minimal.**
-
-```sql
-DELETE FROM sesi s WHERE s.id = 1;
-SELECT s.id FROM pengguna u;
-```
-
-**Akar masalah.** Bug ada di tahap resolver, fungsi `_delete`. Fungsi itu memanggil `_push()` untuk membuat scope DELETE dan mendeklarasikan tabel targetnya, tetapi tidak pernah memanggil `_pop()`, berbeda dengan `_select` dan `_update`. Ini melanggar pasangan `beginScope`/`endScope` (Bab 11, scopes): setiap scope yang dibuka harus ditutup di akhir blok yang membuatnya. Akibatnya `self.scope` tetap menunjuk scope DELETE setelah statement selesai, scope statement berikutnya menjadi anaknya, dan alias `s` masih ditemukan lewat rantai `parent`, sehingga satu statement bisa melihat alias statement sebelumnya.
-
-**Perbaikan.** `crud/resolver.py`, `_delete`: menambahkan `self._pop()`. Alternatif yang
-ditolak: mereset `self.scope = None` di awal tiap statement, karena menyembunyikan push/pop
-yang tidak seimbang.
-
-**Test regresi.** `test_regresi_scope_delete_tidak_bocor_ke_statement_berikutnya`.
-
-**Peran AI.** Claude membantu menemukan bug ini dengan membandingkan `_delete` dengan `_update` dan mengusulkan penambahan `self._pop()`. Verifikasi: (1) SPESIFIKASI 4.5 meminta tidak ada scope tersisa sesudah satu statement; (2) `test_regresi_scope_delete_tidak_bocor_ke_statement_berikutnya` gagal sebelum perbaikan dan lulus sesudahnya; (3) `audit.sql` baris 18 sekarang melapor error alias `s`.
-
----
-
-## Bug 9: Subquery di `UPDATE` dihitung sebagai `U`
-
-**Ditemukan oleh:** Hilman · **Diperbaiki oleh:** Hilman
-
-**Gejala.** `UPDATE pelanggan SET level = 'gold' WHERE id IN (SELECT pelanggan_id FROM
-pesanan)` menghasilkan `pesanan: U`, seharusnya `pesanan: R` (SPESIFIKASI 5: membaca lewat
-subquery selalu R). Akibatnya `laporan_penjualan.sql` memuat `pesanan: RUD` dan bukan `RD`.
-
-**Reproduksi minimal.**
-
-```sql
-UPDATE a SET x = (SELECT MAX(y) FROM b);
-```
-
-**Akar masalah.** Bug ada di tahap analyzer, fungsi `analyze_statement`, cabang `Update`. Penelusuran AST membawa parameter `op` yang menentukan operasi untuk tabel yang ditemui. Kode lama meneruskan `"U"` ke subquery di `SET` dan `WHERE`, sehingga operasi tulis milik tabel target ikut menempel pada tabel yang hanya dibaca. Aturan lokal proyek (SPESIFIKASI 5) menyatakan tabel yang dibaca lewat subquery selalu `R`, apa pun jenis statement luarnya, dan `U` hanya milik tabel target. Perbaikannya memisahkan keduanya: target diberi `U`, sedangkan subquery dikumpulkan dengan `"R"`.
-
-**Perbaikan.** `crud/analyzer.py`, `analyze_statement`: subquery di `SET` dan `WHERE`
-dikumpulkan dengan operasi `"R"`. Alternatif yang ditolak: menurunkan operasi dari jenis
-statement terluar.
-
-**Test regresi.** `test_regresi_update_subquery_di_where_dibaca_R`,
-`test_regresi_update_subquery_di_set_dibaca_R`.
-
-**Peran AI.** Claude membantu menemukan bug ini dengan membaca cabang `Update` terhadap tabel aturan di SPESIFIKASI 5. Verifikasi: (1) hasil `--detail` untuk `audit.sql` baris 20 sekarang `pelanggan,R` dan `pesanan,U`, cocok dengan hitungan manual; (2) dua test regresi (`..._di_where_dibaca_R` dan `..._di_set_dibaca_R`) gagal sebelum dan lulus sesudah perbaikan.
-
----
+<!-- Bug dari Anggota 2 (resolver/analyzer) ditambahkan di bawah ini. -->
