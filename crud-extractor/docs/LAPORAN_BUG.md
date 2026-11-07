@@ -1,13 +1,5 @@
 # Laporan Bug
 
-Salin blok di bawah untuk setiap bug. Bagian **Akar masalah** wajib ditulis dengan kata-kata
-sendiri dan memakai konsep dari *Crafting Interpreters* (sebutkan bab). Bagian ini diuji lisan.
-
-> **Status draft (Anggota 1: lexer dan parser).** Gejala, reproduksi, perbaikan, dan test sudah
-> diisi dari hasil menjalankan kode asli. Bagian **Akar masalah** masih kosong dan berisi
-> *petunjuk konsep* saja. Tulis penjelasannya sendiri, lalu hapus petunjuknya. Ganti `[nama]`
-> dan konfirmasi tiap baris bertanda `[KONFIRMASI]`. Bug resolver dan analyzer (Anggota 2)
-> ditambahkan di bawah Bug 6.
 
 ---
 
@@ -189,4 +181,4 @@ rusak dan menghasilkan error ganda.
   ditutup menjadi `LexError` di posisi `/*`. Test: `test_regresi_komentar_blok_T3`,
   `test_regresi_komentar_blok_tidak_ditutup_lexerror`, `test_tepi_bentuk_komentar_blok_khusus`.
 
-<!-- Bug dari Anggota 2 (resolver/analyzer) ditambahkan di bawah ini. -->
+
