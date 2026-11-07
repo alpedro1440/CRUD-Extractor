@@ -1,9 +1,6 @@
 # Laporan Akhir
 
 ## 1. Hasil evaluasi
-
-Keluaran `python3 evaluate.py` setelah `data/ground_truth.csv` lengkap (4 file, 27 triple):
-
 ```text
 Dievaluasi: audit.sql, campuran_error.sql, laporan_penjualan.sql, pemeliharaan.sql (27 triple)
 
@@ -37,8 +34,6 @@ bersumber dari tiga hal: komentar dan string dianggap SQL, `DELETE FROM x` dihit
 baca, dan nomor baris statement salah karena pemisahan hanya berdasarkan `;`.
 
 ## 2. Tiga kasus di mana regex salah
-
-Bukti diambil dengan menjalankan `baseline/regex_extractor.py` pada berkas `data/sample/`.
 
 1. **Komentar dianggap perintah.** `laporan_penjualan.sql` baris 2:
    `-- DELETE FROM pelanggan`. Regex melaporkan `pelanggan: D` (dan juga R) yang tidak pernah
@@ -85,5 +80,3 @@ Bukti diambil dengan menjalankan `baseline/regex_extractor.py` pada berkas `data
   Analyzer, `KARTU_DESAIN.md`, draft `LAPORAN_AKHIR.md`, `pemeliharaan.sql` pada ground truth.
 - **Bersama:** menjalankan seluruh pytest, evaluasi parser vs regex, review silang laporan.
 - **Memastikan keduanya paham seluruh kode:** setiap anggota menjelaskan bagiannya ke partner
-  setelah selesai (Lexer-Parser oleh Anggota 1, Resolver-Analyzer oleh Anggota 2), lalu
-  masing-masing diuji lisan atas bagian partner.
